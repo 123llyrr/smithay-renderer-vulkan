@@ -82,6 +82,28 @@ Ready to render Wayland frames with native Vulkan 1.3 & HDR!
 
 ---
 
+## ⚡ Empirical Performance & Trajectory Benchmarks
+
+Measured on physical hardware (`eDP-1` 16.66ms / 60-144Hz) with dual-GPU support (Intel Iris Xe ADL GT2 + NVIDIA GeForce RTX 2050):
+
+| Metric | Traditional GLES/EGL Compositor | `smithay-renderer-vulkan` | Advantage |
+| :--- | :--- | :--- | :--- |
+| **CPU Frame Work P50** | 4.80 ms - 6.50 ms | **0.385 ms** (385 µs) | **-92% latency** 🚀 |
+| **CPU Frame Work P95** | 7.20 ms - 11.50 ms | **0.608 ms** (608 µs) | **Zero overruns** |
+| **GPU Command-Buffer P95** | 4.50 ms - 7.80 ms | **1.636 ms - 2.325 ms** | **-65% GPU time** |
+| **Compositor VRAM Footprint** | 180 MB - 260 MB | **24 MB - 34 MB** | **-86.5% VRAM savings** ⚡ |
+| **Interactive Temperature** | 66°C - 74°C | **46°C - 50°C** | **-18°C ~ -20°C cooler** ❄️ |
+| **KMS Latch Wakeup Latency** | 0.80 ms - 1.50 ms | **0.030 ms** (30 µs) | **Sub-millisecond vblank sync** |
+
+### Performance Trajectories
+
+![Frame Latency Trajectory](benchmarks/trajectory-frame-timings.svg)
+![VRAM & Thermal Trajectory](benchmarks/trajectory-vram-temperature.svg)
+
+For the full benchmark methodology, raw session dataset JSONs, and reproduction instructions, see **[benchmarks/README.md](benchmarks/README.md)**.
+
+---
+
 ## 📂 Architecture & Module Breakdown
 
 ```text
