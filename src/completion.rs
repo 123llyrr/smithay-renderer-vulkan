@@ -405,7 +405,7 @@ mod tests {
 
     use super::*;
     use crate::render_helpers::vulkan::allocate_texture;
-    use crate::render_helpers::vulkan::hardware_tests::setup;
+    use crate::hardware_tests::setup;
 
     #[test]
     fn admission_stays_bounded_until_every_outstanding_owner_retires() {

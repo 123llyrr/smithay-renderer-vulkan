@@ -34,8 +34,8 @@ smithay = { version = "0.7.0", default-features = false, features = [
     "wayland_frontend",
 ] }
 
-[patch.crates-io]
-smithay = { path = "/home/liuxue/clarion/third_party/smithay" }
+# [patch.crates-io]
+# smithay = { path = "/home/liuxue/clarion/third_party/smithay" }
 
 [dev-dependencies]
 tracing-subscriber = "0.3"

@@ -382,7 +382,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::render_helpers::vulkan::hardware_tests::setup;
+    use crate::hardware_tests::setup;
 
     #[test]
     fn upload_damage_is_clipped_disjoint_and_preserves_covered_pixels() {

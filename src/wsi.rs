@@ -476,7 +476,7 @@ impl VulkanWsi {
     pub fn present_from(
         &mut self,
         source: &VulkanTexture,
-        window: &dyn Window,
+        window: &Window,
     ) -> anyhow::Result<PresentResult> {
         if self.requested_size.is_none() && self.acquisition.image.is_none() {
             return Ok(PresentResult::Recreate);

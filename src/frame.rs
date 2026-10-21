@@ -3147,7 +3147,7 @@ impl GpuCompletion {
 mod tests {
     use super::*;
     use crate::render_helpers::vulkan::allocate_texture;
-    use crate::render_helpers::vulkan::hardware_tests::setup;
+    use crate::hardware_tests::setup;
 
     #[test]
     fn color_cache_budget_is_device_bounded_without_upfront_reservation() {
@@ -3209,7 +3209,7 @@ mod tests {
             } else {
                 (3840, 2160)
             };
-        let modifiers = crate::render_helpers::vulkan::hardware_tests::modifiers(
+        let modifiers = crate::hardware_tests::modifiers(
             &renderer,
             &gles,
             Fourcc::Argb8888,
@@ -3266,7 +3266,7 @@ mod tests {
             true,
         )
         .unwrap();
-        let output_modifiers = crate::render_helpers::vulkan::hardware_tests::modifiers(
+        let output_modifiers = crate::hardware_tests::modifiers(
             &renderer,
             &gles,
             Fourcc::Argb2101010,
@@ -3374,15 +3374,8 @@ mod tests {
         }
         samples.sort_by(f64::total_cmp);
         eprintln!(
-            "HDR_DECORATED_SUBMISSION {}",
-            serde_json::json!({
-                "large_windows": large_windows, "window_size": [window_width, window_height],
-                "constrained_control": constrained, "device_budget_bytes": device_budget,
-                "warm_allocations": warm_allocations,
-                "sources": sources.len(), "samples": samples.len(), "p50_ms": samples[24],
-                "p95_ms": samples[45], "max_ms": samples[47],
-                "scope": "4K EGL DMA-BUF sources, FP16 scene, 10-bit HDR outputs; CPU record/submit only; explicit completion waits excluded"
-            })
+            "HDR_DECORATED_SUBMISSION large_windows={large_windows} warm_allocations={warm_allocations} p50_ms={} p95_ms={}",
+            samples[24], samples[45]
         );
         drop(buffers);
         warm_allocations

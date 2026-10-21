@@ -2182,6 +2182,11 @@ impl NativeRenderer {
         }
         self.offscreen_cache.push(texture);
     }
+
+    /// Check whether a render error indicates busy/deferred execution.
+    pub fn is_render_deferred(error: &NativeError) -> bool {
+        error.is_busy()
+    }
 }
 impl RendererSuper for NativeRenderer {
     type Error = NativeError;
@@ -2411,12 +2416,6 @@ impl Renderer for NativeRenderer {
             self.scene_deferred |= error.is_busy();
             error
         })
-    }
-
-    fn is_render_deferred(error: &NativeError) -> bool {
-        // Busy is returned before submission to this output. Any already
-        // submitted offscreen work owns separate images and completion leases.
-        error.is_busy()
     }
 }
 impl Bind<VulkanTexture> for NativeRenderer {
@@ -3491,9 +3490,6 @@ impl Frame for NativeFrame<'_> {
     }
     fn transformation(&self) -> Transform {
         self.transform
-    }
-    fn output_size(&self) -> Size<i32, Physical> {
-        self.size
     }
     fn clear(
         &mut self,

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Build & Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libvulkan-dev \
+            libwayland-dev \
+            libgbm-dev \
+            libdrm-dev \
+            libxkbcommon-dev \
+            libseat-dev \
+            libinput-dev \
+            libudev-dev \
+            vulkan-tools
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check code formatting
+        run: cargo fmt --all -- --check
+
+      - name: Cargo check (library & targets)
+        run: cargo check --all-targets
+
+      - name: Cargo check examples
+        run: cargo check --examples
+
+      - name: Validate cargo package
+        run: cargo package --no-verify
