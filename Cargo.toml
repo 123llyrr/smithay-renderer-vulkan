@@ -1,0 +1,41 @@
+[package]
+name = "smithay-renderer-vulkan"
+version = "0.1.0"
+authors = ["123llyrr", "Clarion Contributors", "Smithay Contributors"]
+edition = "2021"
+rust-version = "1.80"
+description = "High-performance native Vulkan 1.3 rendering backend and Smithay Renderer adapter with full HDR10 / scRGB color management and zero-copy DMA-BUF"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/123llyrr/smithay-renderer-vulkan"
+readme = "README.md"
+keywords = ["wayland", "smithay", "vulkan", "hdr", "compositor"]
+categories = ["graphics", "rendering", "gui"]
+
+[dependencies]
+anyhow = "1.0"
+ash = { version = "0.38.0", default-features = false, features = ["std", "libloading"] }
+bitflags = "2.13.1"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+calloop = { version = "0.14.4", features = ["executor", "futures-io", "signals"] }
+drm-ffi = "0.9.1"
+glam = "0.33"
+libc = "0.2.189"
+smallvec = "1.15.2"
+tracing = "0.1.44"
+
+smithay = { version = "0.7.0", default-features = false, features = [
+    "backend_drm",
+    "backend_egl",
+    "backend_gbm",
+    "backend_vulkan",
+    "backend_winit",
+    "desktop",
+    "renderer_gl",
+    "wayland_frontend",
+] }
+
+[patch.crates-io]
+smithay = { path = "/home/liuxue/clarion/third_party/smithay" }
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
