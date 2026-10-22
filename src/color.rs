@@ -4,6 +4,9 @@
 //! by code value one, independently of reference white and mastering metadata.
 //! PQ is always absolute ST 2084; its black point is not offset by display EDID.
 
+pub mod lut3d;
+pub use lut3d::{Lut3D, LutError, VulkanLut3D, VulkanLutError};
+
 mod pipeline;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -465,4 +468,4 @@ mod tests {
 #[cfg(test)]
 mod pipeline_contracts;
 
-pub use crate::color_pipeline::*;
+pub(crate) use crate::color_pipeline::*;

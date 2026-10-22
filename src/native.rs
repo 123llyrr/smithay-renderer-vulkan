@@ -677,6 +677,18 @@ pub struct NativeFramebuffer<'a> {
     _buffer: Option<Dmabuf>,
     _borrow: PhantomData<&'a mut ()>,
 }
+
+impl NativeFramebuffer<'_> {
+    /// Returns a reference to the underlying Vulkan texture attachment.
+    pub fn texture(&self) -> &VulkanTexture {
+        &self.texture
+    }
+
+    /// Returns a reference to the bound DMA-BUF, if bound from a DMA-BUF (such as DRM scanout).
+    pub fn dmabuf(&self) -> Option<&Dmabuf> {
+        self._buffer.as_ref()
+    }
+}
 impl std::fmt::Debug for NativeFramebuffer<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.texture.fmt(f)
@@ -2054,6 +2066,22 @@ impl NativeRenderer {
         }
         let resources = NativeDeviceResources::prepare(&renderer)?;
         Ok(Self::assemble(renderer, resources))
+    }
+
+    /// Create a hardware 3D LUT texture (`VkImageType::TYPE_3D`) from a `.cube` definition.
+    pub fn create_3d_lut_from_cube(
+        &self,
+        cube_str: &str,
+    ) -> Result<crate::color::lut3d::VulkanLut3D, crate::color::lut3d::VulkanLutError> {
+        self.renderer.create_3d_lut_from_cube(cube_str)
+    }
+
+    /// Create an identity hardware 3D LUT texture (`VkImageType::TYPE_3D`) of given dimension.
+    pub fn create_identity_3d_lut(
+        &self,
+        size: u32,
+    ) -> Result<crate::color::lut3d::VulkanLut3D, crate::color::lut3d::VulkanLutError> {
+        self.renderer.create_identity_3d_lut(size)
     }
 
     /// No device creation, image allocation, format query, shader compile or GPU
@@ -4231,6 +4259,24 @@ pub(super) mod readback_tests {
 }
 
 #[cfg(test)]
+mod bind_dmabuf_tests {
+    use super::*;
+    use smithay::backend::allocator::dmabuf::Dmabuf;
+    use smithay::backend::renderer::Bind;
+
+    fn assert_drm_compositor_bounds<R>()
+    where
+        R: Renderer + Bind<Dmabuf> + Bind<VulkanTexture>,
+    {
+    }
+
+    #[test]
+    fn test_native_renderer_satisfies_smithay_drm_compositor_bind_dmabuf_bounds() {
+        assert_drm_compositor_bounds::<NativeRenderer>();
+    }
+}
+
+#[cfg(test)]
 mod backpressure_tests {
     use super::super::hardware_tests::setup;
     use super::readback_tests::TimelineGate;
@@ -4300,6 +4346,7 @@ mod backpressure_tests {
     }
 
     #[test]
+    #[cfg(feature = "clarion_internal_tests")]
     #[ignore = "requires real DRM render node and Vulkan"]
     fn dynamic_capacity_targets_keep_rendering_before_resize_finishes() {
         use smithay::backend::renderer::element::Kind;

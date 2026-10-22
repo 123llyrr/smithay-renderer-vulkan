@@ -1,10 +1,10 @@
 [package]
 name = "smithay-renderer-vulkan"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["123llyrr", "Clarion Contributors", "Smithay Contributors"]
 edition = "2021"
 rust-version = "1.80"
-description = "High-performance native Vulkan 1.3 rendering backend and Smithay Renderer adapter with full HDR10 / scRGB color management and zero-copy DMA-BUF"
+description = "High-performance native Vulkan 1.3 rendering backend and Smithay Renderer adapter with full HDR10 / scRGB color management, 3D LUT sampling, and zero-copy DMA-BUF"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/123llyrr/smithay-renderer-vulkan"
 readme = "README.md"
@@ -23,6 +23,10 @@ libc = "0.2.189"
 smallvec = "1.15.2"
 tracing = "0.1.44"
 
+# In-process shader compilation backends (replaces external glslc/vulkan-shader-compiler CLI)
+naga = { version = "25.0.1", optional = true, default-features = false, features = ["glsl-in", "spv-out"] }
+shaderc = { version = "0.10.1", optional = true }
+
 smithay = { version = "0.7.0", default-features = false, features = [
     "backend_drm",
     "backend_egl",
@@ -34,8 +38,11 @@ smithay = { version = "0.7.0", default-features = false, features = [
     "wayland_frontend",
 ] }
 
-# [patch.crates-io]
-# smithay = { path = "/home/liuxue/clarion/third_party/smithay" }
+[features]
+default = []
+naga = ["dep:naga"]
+shaderc = ["dep:shaderc"]
+clarion_internal_tests = []
 
 [dev-dependencies]
 tracing-subscriber = "0.3"

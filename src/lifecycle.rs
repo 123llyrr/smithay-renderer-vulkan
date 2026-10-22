@@ -649,29 +649,32 @@ pub fn arm_exit_deadline(timeout: Duration) {
 /// once-registered callback cannot precede all future layer cleanup. Main and
 /// the linked main/exit trampolines must drain before libc starts its callbacks.
 pub(super) fn install_exit_hook_after_driver_initialization() {
-    static INSTALLED: OnceLock<()> = OnceLock::new();
-    INSTALLED.get_or_init(|| {
-        extern "C" fn on_exit() {
-            let result = std::panic::catch_unwind(|| {
-                CLOSING.store(true, std::sync::atomic::Ordering::Release);
-                arm_exit_deadline(exit_timeout());
-                if registry().close_if_drained() {
-                    registry().lock().deadline = None;
-                    registry().changed.notify_all();
-                } else {
-                    // A layer may already have erased its dispatch tables. Waking
-                    // a pending worker here would turn safe retention into a crash.
+    #[cfg(not(test))]
+    {
+        static INSTALLED: OnceLock<()> = OnceLock::new();
+        INSTALLED.get_or_init(|| {
+            extern "C" fn on_exit() {
+                let result = std::panic::catch_unwind(|| {
+                    CLOSING.store(true, std::sync::atomic::Ordering::Release);
+                    arm_exit_deadline(exit_timeout());
+                    if registry().close_if_drained() {
+                        registry().lock().deadline = None;
+                        registry().changed.notify_all();
+                    } else {
+                        // A layer may already have erased its dispatch tables. Waking
+                        // a pending worker here would turn safe retention into a crash.
+                        terminate();
+                    }
+                });
+                if result.is_err() {
                     terminate();
                 }
-            });
-            if result.is_err() {
+            }
+            if unsafe { libc::atexit(on_exit) } != 0 {
                 terminate();
             }
-        }
-        if unsafe { libc::atexit(on_exit) } != 0 {
-            terminate();
-        }
-    });
+        });
+    }
 }
 fn exit_timeout() -> Duration {
     #[cfg(test)]

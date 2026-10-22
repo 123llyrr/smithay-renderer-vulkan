@@ -40,9 +40,11 @@ mod shm;
 pub(crate) mod timing;
 pub mod wsi;
 
+pub use color::lut3d::{Lut3D, LutError, VulkanLut3D, VulkanLutError};
 pub use device::{VulkanContext, VulkanInitError};
 pub use dmabuf::{DmabufImporter, VulkanImportError};
 pub use frame::VulkanFrame;
+pub use native::{NativeError, NativeFrame, NativeFramebuffer, NativeRenderer};
 pub use pipeline::{FormatPipelines, QuadPushConstants, VulkanPipelineManager};
 
 /// Bounded GPU wait so a hung device cannot freeze the compositor event loop.
@@ -458,6 +460,19 @@ impl VulkanRenderer {
         }
     }
 
+    /// Create a hardware 3D LUT texture (`VkImageType::TYPE_3D`) from a `.cube` definition.
+    pub fn create_3d_lut_from_cube(&self, cube_str: &str) -> Result<VulkanLut3D, VulkanLutError> {
+        let ctx = self.ctx.as_ref().ok_or(vk::Result::ERROR_INITIALIZATION_FAILED)?;
+        VulkanLut3D::from_cube_str(ctx.clone(), cube_str)
+    }
+
+    /// Create an identity hardware 3D LUT texture (`VkImageType::TYPE_3D`) of given dimension.
+    pub fn create_identity_3d_lut(&self, size: u32) -> Result<VulkanLut3D, VulkanLutError> {
+        let ctx = self.ctx.as_ref().ok_or(vk::Result::ERROR_INITIALIZATION_FAILED)?;
+        let lut = Lut3D::identity(size);
+        VulkanLut3D::new(ctx.clone(), &lut)
+    }
+
     fn prune_caches(&mut self) {
         self.texture_cache
             .borrow_mut()
@@ -513,6 +528,18 @@ impl VulkanRenderer {
             );
         }
         Ok(key)
+    }
+
+    /// Import or retrieve an existing cached target texture for the given DMA-BUF.
+    ///
+    /// The imported Vulkan texture is configured with `COLOR_ATTACHMENT` usage and
+    /// appropriate DRM format modifiers for direct KMS hardware scanout or composition.
+    pub fn get_or_import_target_texture(
+        &mut self,
+        target: &Dmabuf,
+    ) -> Result<VulkanTexture, VulkanImportError> {
+        let key = self.cache_target(target)?;
+        Ok(self.target_cache[&key].texture.clone())
     }
 
     /// Render to externally owned raw image handles. The caller must keep the
@@ -1242,6 +1269,30 @@ mod tests {
             ctx.device.destroy_image(image, None);
             ctx.device.free_memory(memory, None);
         }
+    }
+
+    #[test]
+    fn test_vulkan_3d_lut_gpu_allocation_and_upload() {
+        let Some(renderer) = gpu_test_renderer() else {
+            return;
+        };
+        let ctx = renderer.ctx.clone().unwrap();
+
+        // Generate an identity 3D LUT (17x17x17)
+        let lut = color::lut3d::Lut3D::identity(17);
+        let vk_lut =
+            color::lut3d::VulkanLut3D::new(ctx, &lut).expect("failed to upload 3D LUT to GPU");
+
+        assert_eq!(vk_lut.size(), 17);
+        assert_ne!(vk_lut.image(), vk::Image::null());
+        assert_ne!(vk_lut.image_view(), vk::ImageView::null());
+        assert_ne!(vk_lut.sampler(), vk::Sampler::null());
+        assert!(vk_lut.allocation_size() > 0);
+
+        let desc = vk_lut.descriptor_image_info();
+        assert_eq!(desc.sampler, vk_lut.sampler());
+        assert_eq!(desc.image_view, vk_lut.image_view());
+        assert_eq!(desc.image_layout, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
     }
 }
 

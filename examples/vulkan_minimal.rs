@@ -3,9 +3,10 @@
 //! This example demonstrates initializing the native Vulkan rendering context,
 //! querying device capabilities, and creating a Vulkan-backed Smithay NativeRenderer.
 
+use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::drm::DrmNode;
-use smithay_renderer_vulkan::native::NativeRenderer;
-use smithay_renderer_vulkan::VulkanRenderer;
+use smithay::backend::renderer::Bind;
+use smithay_renderer_vulkan::{Lut3D, NativeRenderer, VulkanRenderer};
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().init();
@@ -38,9 +39,21 @@ fn main() -> anyhow::Result<()> {
 
                 // Create Smithay NativeRenderer adapter
                 match NativeRenderer::new(renderer) {
-                    Ok(_native) => {
+                    Ok(native) => {
                         println!("\nSuccessfully constructed Smithay NativeRenderer adapter!");
                         println!("Ready to render Wayland frames with native Vulkan 1.3 & HDR!");
+
+                        // Demonstrate Bind<Dmabuf> scanout capability
+                        if let Some(formats) = Bind::<Dmabuf>::supported_formats(&native) {
+                            println!("      Hardware Scanout (Bind<Dmabuf>): {} DRM formats supported", formats.iter().count());
+                        }
+
+                        // Demonstrate 3D LUT generation
+                        let lut = Lut3D::identity(17);
+                        println!("      Hardware 3D LUT (TYPE_3D): Generated {}^3 identity LUT for color pipeline", lut.size);
+
+                        drop(native);
+                        let _ = smithay_renderer_vulkan::lifecycle::shutdown_workers(std::time::Duration::from_millis(500));
                     }
                     Err(err) => {
                         eprintln!("Failed to construct NativeRenderer: {:?}", err);

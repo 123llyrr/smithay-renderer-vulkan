@@ -208,7 +208,83 @@ pub(super) fn process(
     stop(&mut child, reaped);
     result
 }
-pub(super) fn compile(source: &str, stage: &str, cancel: &AtomicBool) -> io::Result<Vec<u32>> {
+
+#[cfg(feature = "shaderc")]
+fn compile_shaderc(source: &str, stage: &str, cancel: &AtomicBool) -> io::Result<Vec<u32>> {
+    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err(io::Error::new(io::ErrorKind::Interrupted, "shader compile cancelled"));
+    }
+    let compiler = shaderc::Compiler::new().map_err(|err| {
+        io::Error::new(io::ErrorKind::Other, format!("failed to initialize in-process shaderc compiler: {err}"))
+    })?;
+    let mut options = shaderc::CompileOptions::new().map_err(|err| {
+        io::Error::new(io::ErrorKind::Other, format!("failed to create shaderc compile options: {err}"))
+    })?;
+    options.set_target_env(shaderc::TargetEnv::Vulkan, shaderc::EnvVersion::Vulkan1_2 as u32);
+    options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+
+    let kind = match stage {
+        "vert" | "vertex" => shaderc::ShaderKind::Vertex,
+        "frag" | "fragment" => shaderc::ShaderKind::Fragment,
+        "comp" | "compute" => shaderc::ShaderKind::Compute,
+        _ => shaderc::ShaderKind::InferFromSource,
+    };
+
+    let artifact = compiler
+        .compile_into_spirv(source, kind, "custom_shader.glsl", "main", Some(&options))
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, format!("shaderc compilation error: {err}")))?;
+
+    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err(io::Error::new(io::ErrorKind::Interrupted, "shader compile cancelled"));
+    }
+
+    Ok(artifact.as_binary().to_vec())
+}
+
+#[cfg(feature = "naga")]
+fn compile_naga(source: &str, stage: &str, cancel: &AtomicBool) -> io::Result<Vec<u32>> {
+    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err(io::Error::new(io::ErrorKind::Interrupted, "shader compile cancelled"));
+    }
+    use naga::front::glsl::{Frontend, Options};
+    use naga::back::spv;
+
+    let shader_stage = match stage {
+        "vert" | "vertex" => naga::ShaderStage::Vertex,
+        "frag" | "fragment" => naga::ShaderStage::Fragment,
+        "comp" | "compute" => naga::ShaderStage::Compute,
+        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("unsupported shader stage for naga: {stage}"))),
+    };
+
+    let mut frontend = Frontend::default();
+    let options = Options::from(shader_stage);
+    let module = frontend.parse(&options, source).map_err(|err| {
+        io::Error::new(io::ErrorKind::InvalidData, format!("naga GLSL parsing error: {err:?}"))
+    })?;
+
+    let info = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::empty(),
+    )
+    .validate(&module)
+    .map_err(|err| {
+        io::Error::new(io::ErrorKind::InvalidData, format!("naga validation error: {err:?}"))
+    })?;
+
+    let mut spv_options = spv::Options::default();
+    spv_options.lang_version = (1, 3);
+    let spv = spv::write_vec(&module, &info, &spv_options, None).map_err(|err| {
+        io::Error::new(io::ErrorKind::InvalidData, format!("naga SPIR-V generation error: {err:?}"))
+    })?;
+
+    if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err(io::Error::new(io::ErrorKind::Interrupted, "shader compile cancelled"));
+    }
+
+    Ok(spv)
+}
+
+fn compile_external(source: &str, stage: &str, cancel: &AtomicBool) -> io::Result<Vec<u32>> {
     let mut command = Command::new("glslc");
     command.args([
         "--target-env=vulkan1.2",
@@ -217,7 +293,16 @@ pub(super) fn compile(source: &str, stage: &str, cancel: &AtomicBool) -> io::Res
         "-",
         "-",
     ]);
-    let bytes = process(&mut command, source.as_bytes(), Limits::default(), cancel)?;
+    let bytes = match process(&mut command, source.as_bytes(), Limits::default(), cancel) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Neither `glslc` nor in-process shader compiler feature (`naga` or `shaderc`) is available. Enable cargo feature `naga` or `shaderc` for in-process compilation, or install `glslc`.",
+            ));
+        }
+        Err(err) => return Err(err),
+    };
     if bytes.len() < 4
         || !bytes.len().is_multiple_of(4)
         || bytes[..4] != 0x0723_0203u32.to_le_bytes()
@@ -233,6 +318,21 @@ pub(super) fn compile(source: &str, stage: &str, cancel: &AtomicBool) -> io::Res
         .iter()
         .map(|word| u32::from_le_bytes(*word))
         .collect())
+}
+
+pub(super) fn compile(source: &str, stage: &str, cancel: &AtomicBool) -> io::Result<Vec<u32>> {
+    #[cfg(feature = "shaderc")]
+    {
+        return compile_shaderc(source, stage, cancel);
+    }
+    #[cfg(all(feature = "naga", not(feature = "shaderc")))]
+    {
+        return compile_naga(source, stage, cancel);
+    }
+    #[cfg(not(any(feature = "shaderc", feature = "naga")))]
+    {
+        compile_external(source, stage, cancel)
+    }
 }
 
 #[cfg(test)]
@@ -356,5 +456,25 @@ mod tests {
             .kind(),
             io::ErrorKind::InvalidInput
         );
+    }
+
+    #[test]
+    #[cfg(feature = "shaderc")]
+    fn test_in_process_shaderc_compilation() {
+        let cancel = AtomicBool::new(false);
+        let glsl = "#version 450\nvoid main() {\n    gl_Position = vec4(0.0);\n}\n";
+        let spirv = compile_shaderc(glsl, "vertex", &cancel).expect("in-process shaderc compile failed");
+        assert!(!spirv.is_empty());
+        assert_eq!(spirv[0], 0x0723_0203);
+    }
+
+    #[test]
+    #[cfg(feature = "naga")]
+    fn test_in_process_naga_compilation() {
+        let cancel = AtomicBool::new(false);
+        let glsl = "#version 450\nvoid main() {\n    gl_Position = vec4(0.0);\n}\n";
+        let spirv = compile_naga(glsl, "vertex", &cancel).expect("in-process naga compile failed");
+        assert!(!spirv.is_empty());
+        assert_eq!(spirv[0], 0x0723_0203);
     }
 }
